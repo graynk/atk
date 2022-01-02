@@ -18,14 +18,17 @@ func errAndExit(message string, err error) {
 
 func main() {
 	if len(os.Args) < 2 {
-		errAndExit("Please pass the path to the encrypted Aegis JSON file as input", nil)
+		errAndExit("Please pass the path to the encrypted Aegis JSON file as parameter", nil)
+	}
+	if len(os.Args) < 3 {
+		errAndExit("Please pass the path to the desired output file", nil)
 	}
 	data, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		errAndExit("Failed to read exported file: %v", err)
 	}
-	db := aegis{}
-	err = json.Unmarshal(data, &db)
+	exported := aegis{}
+	err = json.Unmarshal(data, &exported)
 	if err != nil {
 		errAndExit("Improperly formatted JSON file: %v", err)
 	}
@@ -38,5 +41,10 @@ func main() {
 	if len(password) < 2 {
 		errAndExit("Empty password", nil)
 	}
-	db.Decrypt(password[:len(password)-1])
+	password = password[:len(password)-1]
+	aegisDb := exported.Decrypt(password)
+	if len(aegisDb.Entries) == 0 {
+		errAndExit("No entries in the database, nothing to save", nil)
+	}
+	aegisDb.ToKeePass(os.Args[2], password)
 }

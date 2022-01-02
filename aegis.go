@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 )
 
@@ -23,7 +24,7 @@ type header struct {
 
 type slot struct {
 	Type   int
-	Uuid   string
+	UUID   string
 	Key    hexedBytes
 	Params params `json:"key_params"`
 	N      int
@@ -37,7 +38,7 @@ type params struct {
 	Tag   hexedBytes
 }
 
-func (a aegis) Decrypt(password []byte) {
+func (a aegis) Decrypt(password []byte) db {
 	var masterKey []byte
 	for _, slot := range a.Header.Slots {
 		if slot.Type != 1 {
@@ -64,7 +65,12 @@ func (a aegis) Decrypt(password []byte) {
 		errAndExit("Failed to decrypt database field: %v", err)
 	}
 
-	fmt.Println("Data:\t ", string(output))
+	aegisDb := db{}
+	err = json.Unmarshal(output, &aegisDb)
+	if err != nil {
+		errAndExit("Failed to unmarshal decrypted database: %v", err)
+	}
+	return aegisDb
 }
 
 func (b *hexedBytes) UnmarshalJSON(data []byte) error {
