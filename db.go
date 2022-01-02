@@ -91,8 +91,7 @@ func (d db) ToKeePass(path string, password []byte) {
 	}
 	defer file.Close()
 
-	// create the new database
-	db := gokeepasslib.NewDatabase()
+	db := gokeepasslib.NewDatabase(gokeepasslib.WithDatabaseKDBXVersion4())
 	db.Content.Meta.DatabaseName = "TOTP" // TODO provide optional argument for database name
 	db.Credentials = gokeepasslib.NewPasswordCredentials(string(password))
 	entries := make([]gokeepasslib.Entry, 0, len(d.Entries))
@@ -114,13 +113,11 @@ func (d db) ToKeePass(path string, password []byte) {
 	}
 	db.Content.Root.Groups = []gokeepasslib.Group{{Name: "Default", Entries: entries}}
 
-	// Lock entries using stream cipher
 	err = db.LockProtectedEntries()
 	if err != nil {
 		errAndExit("Failed to lock entries when saving KeePass database: %v", err)
 	}
 
-	// and encode it into the file
 	keepassEncoder := gokeepasslib.NewEncoder(file)
 	err = keepassEncoder.Encode(db)
 	if err != nil {
