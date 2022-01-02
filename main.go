@@ -46,5 +46,17 @@ func main() {
 	if len(aegisDb.Entries) == 0 {
 		errAndExit("No entries in the database, nothing to save", nil)
 	}
-	aegisDb.ToKeePass(os.Args[2], password)
+	kdbxPath := os.Args[2]
+	stat, err := os.Stat(kdbxPath)
+	if stat != nil || os.IsExist(err) {
+		fmt.Println("A file already exists at the specified output path. Are sure you want to rewrite it completely? Y/N")
+		r, _, err := reader.ReadRune()
+		if err != nil {
+			errAndExit("Failed to read confirmation from stdin: %v", err)
+		}
+		if r != 'Y' && r != 'y' {
+			os.Exit(0)
+		}
+	}
+	aegisDb.ToKeePass(kdbxPath, password)
 }

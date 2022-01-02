@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/tobischo/gokeepasslib"
+	"github.com/tobischo/gokeepasslib/v3"
+	"github.com/tobischo/gokeepasslib/v3/wrappers"
 	"log"
 	"os"
 )
@@ -46,35 +47,35 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 
 	values := []gokeepasslib.ValueData{
 		{
-			"Title",
-			gokeepasslib.V{
+			Key: "Title",
+			Value: gokeepasslib.V{
 				Content: e.Issuer,
 			},
 		},
 		{
-			"UserName",
-			gokeepasslib.V{
+			Key: "UserName",
+			Value: gokeepasslib.V{
 				Content: e.Name,
 			},
 		},
 		{
-			"Notes",
-			gokeepasslib.V{
+			Key: "Notes",
+			Value: gokeepasslib.V{
 				Content: e.Note,
 			},
 		},
 		{
-			"TOTP Settings",
-			gokeepasslib.V{
+			Key: "TOTP Settings",
+			Value: gokeepasslib.V{
 				Content:   totpFormat,
-				Protected: true,
+				Protected: wrappers.BoolWrapper{Bool: true},
 			},
 		},
 		{
-			"TOTP Seed",
-			gokeepasslib.V{
+			Key: "TOTP Seed",
+			Value: gokeepasslib.V{
 				Content:   e.Info.Secret,
-				Protected: true,
+				Protected: wrappers.BoolWrapper{Bool: true},
 			},
 		},
 	}
@@ -92,7 +93,7 @@ func (d db) ToKeePass(path string, password []byte) {
 
 	// create the new database
 	db := gokeepasslib.NewDatabase()
-	db.Content.Meta.DatabaseName = "KDBX4"
+	db.Content.Meta.DatabaseName = "TOTP" // TODO provide optional argument for database name
 	db.Credentials = gokeepasslib.NewPasswordCredentials(string(password))
 	entries := make([]gokeepasslib.Entry, 0, len(d.Entries))
 	for _, entry := range d.Entries {
@@ -100,6 +101,14 @@ func (d db) ToKeePass(path string, password []byte) {
 		if err != nil {
 			log.Println(err)
 			continue
+		}
+		if entry.Icon != "" {
+			iconUUID := gokeepasslib.NewUUID()
+			db.Content.Meta.CustomIcons = append(db.Content.Meta.CustomIcons, gokeepasslib.CustomIcon{
+				UUID: iconUUID,
+				Data: entry.Icon,
+			})
+			converted.CustomIconUUID = iconUUID
 		}
 		entries = append(entries, converted)
 	}
