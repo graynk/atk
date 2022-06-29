@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/term"
 	"os"
+	"syscall"
 )
 
 func errAndExit(message string, err error) {
@@ -32,16 +34,15 @@ func main() {
 	if err != nil {
 		errAndExit("Improperly formatted JSON file: %v", err)
 	}
-	fmt.Println("Please input your master password")
-	var reader = bufio.NewReader(os.Stdin)
-	password, err := reader.ReadBytes('\n')
+	fmt.Print("Please input your master password: ")
+	password, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
 	if err != nil {
 		errAndExit("Failed to read password from input: %v", err)
 	}
-	if len(password) < 2 {
+	if len(password) < 1 {
 		errAndExit("Empty password", nil)
 	}
-	password = password[:len(password)-1]
 	aegisDb := exported.Decrypt(password)
 	if len(aegisDb.Entries) == 0 {
 		errAndExit("No entries in the database, nothing to save", nil)
@@ -50,6 +51,7 @@ func main() {
 	stat, err := os.Stat(kdbxPath)
 	if stat != nil || os.IsExist(err) {
 		fmt.Println("A file already exists at the specified output path. Are sure you want to rewrite it completely? Y/N")
+		var reader = bufio.NewReader(os.Stdin)
 		r, _, err := reader.ReadRune()
 		if err != nil {
 			errAndExit("Failed to read confirmation from stdin: %v", err)
