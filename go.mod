@@ -1,6 +1,6 @@
 module github.com/graynk/atk
 
-go 1.17
+go 1.15
 
 require (
 	github.com/tobischo/gokeepasslib/v3 v3.2.4
