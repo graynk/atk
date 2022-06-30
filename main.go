@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/term"
 	"os"
-	"syscall"
+
+	"golang.org/x/term"
 )
 
 func errAndExit(message string, err error) {
@@ -42,7 +42,7 @@ func main() {
 		errAndExit("Improperly formatted JSON file: %v", err)
 	}
 	fmt.Println("Please input your master password")
-	password, err := term.ReadPassword(syscall.Stdin)
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		errAndExit("Failed to read password from input: %v", err)
 	}
