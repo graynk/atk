@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,10 +24,16 @@ func main() {
 	if len(os.Args) < 3 {
 		errAndExit("Please pass the path to the desired output file", nil)
 	}
-	data, err := os.ReadFile(os.Args[1])
+	file, err := os.Open(os.Args[1])
+	if err != nil {
+		errAndExit("Failed to open exported file: %v", err)
+	}
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(file)
 	if err != nil {
 		errAndExit("Failed to read exported file: %v", err)
 	}
+	data := buf.Bytes()
 	exported := aegis{}
 	err = json.Unmarshal(data, &exported)
 	if err != nil {
