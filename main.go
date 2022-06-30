@@ -34,9 +34,8 @@ func main() {
 	if err != nil {
 		errAndExit("Improperly formatted JSON file: %v", err)
 	}
-	fmt.Print("Please input your master password: ")
-	password, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Println()
+	fmt.Println("Please input your master password")
+	password, err := term.ReadPassword(syscall.Stdin)
 	if err != nil {
 		errAndExit("Failed to read password from input: %v", err)
 	}
