@@ -1,6 +1,6 @@
 # ATP - Aegis to KeePass
 
-A simple tool to convert exported (and encrypted) Aegis database to standalone KeePass. Notes, custom icons and Steam entries get exported as well.
+A simple tool to convert exported (and encrypted) JSON from [Aegis](https://getaegis.app/) to [KeePass](https://keepass.info/download.html) database. Notes, custom icons and Steam entries get exported as well.
 
 ## Installation
 `go install github.com/graynk/atk@latest` or grab a binary from [Releases](https://github.com/graynk/atk/releases) page
