@@ -4,23 +4,27 @@ import (
 	"fmt"
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
+	"maps"
 	"os"
 )
 
 type db struct {
 	Version int
 	Entries []entry
+	Groups  []group
 }
 
 type entry struct {
 	Type     string
-	UUID     string
+	UUID     string `json:"uuid"`
 	Name     string
 	Issuer   string
 	Note     string
+	Favorite bool
 	Icon     string
 	IconMime string `json:"icon_mime"`
 	Info     dbInfo
+	Groups   []string
 }
 
 type dbInfo struct {
@@ -28,6 +32,11 @@ type dbInfo struct {
 	Algo   string
 	Digits int
 	Period int
+}
+
+type group struct {
+	UUID string `json:"uuid"`
+	Name string
 }
 
 func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
@@ -79,6 +88,8 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 		},
 	}
 	convertedEntry.Values = values
+	convertedEntry.AutoType.Enabled = wrappers.BoolWrapper{Bool: true}
+	convertedEntry.AutoType.DefaultSequence = "{TOTP}"
 
 	return convertedEntry, nil
 }
@@ -93,7 +104,16 @@ func (d db) ToKeePass(path string, password []byte) error {
 	db := gokeepasslib.NewDatabase(gokeepasslib.WithDatabaseKDBXVersion4())
 	db.Content.Meta.DatabaseName = "TOTP" // TODO provide optional argument for database name
 	db.Credentials = gokeepasslib.NewPasswordCredentials(string(password))
-	entries := make([]gokeepasslib.Entry, 0, len(d.Entries))
+
+	rootGroup := gokeepasslib.NewGroup()
+	rootGroup.Name = "Default"
+	groups := make(map[string]*gokeepasslib.Group)
+	for _, group := range d.Groups {
+		keepassGroup := gokeepasslib.NewGroup()
+		keepassGroup.Name = group.Name
+		groups[group.UUID] = &keepassGroup
+	}
+
 	for _, entry := range d.Entries {
 		converted, err := entry.ToKeePassEntry()
 		if err != nil {
@@ -108,9 +128,23 @@ func (d db) ToKeePass(path string, password []byte) error {
 			})
 			converted.CustomIconUUID = iconUUID
 		}
-		entries = append(entries, converted)
+		if len(entry.Groups) == 0 {
+			rootGroup.Entries = append(rootGroup.Entries, converted)
+			continue
+		}
+		for _, groupUUID := range entry.Groups {
+			keepassGroup, ok := groups[groupUUID]
+			if !ok {
+				fmt.Printf("Entry \"%s\" is listed as part of a group %s, but no such group was found\n", entry.Name, groupUUID)
+				continue
+			}
+			keepassGroup.Entries = append(keepassGroup.Entries, converted)
+		}
 	}
-	db.Content.Root.Groups = []gokeepasslib.Group{{Name: "Default", Entries: entries}}
+	for groupPointer := range maps.Values(groups) {
+		rootGroup.Groups = append(rootGroup.Groups, *groupPointer)
+	}
+	db.Content.Root.Groups = []gokeepasslib.Group{rootGroup}
 
 	err = db.LockProtectedEntries()
 	if err != nil {
