@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-
 	"golang.org/x/term"
+	"os"
+	"strings"
 )
 
 func errAndExit(message string, err error) {
@@ -20,6 +20,13 @@ func errAndExit(message string, err error) {
 }
 
 func main() {
+	for _, arg := range os.Args {
+		if arg == "-h" || strings.Contains(arg, "help") {
+			fmt.Printf("A simple tool to convert exported (and encrypted) JSON from Aegis to KeePass database.\n\nUsage:\natk /path/to/aegis-export.json /path/to/output.kdbx\n")
+			os.Exit(0)
+		}
+	}
+
 	if len(os.Args) < 2 {
 		errAndExit("Please pass the path to the encrypted Aegis JSON file as parameter", nil)
 	}
