@@ -56,7 +56,10 @@ func main() {
 	if len(password) < 1 {
 		errAndExit("Empty password", nil)
 	}
-	aegisDb := exported.Decrypt(password)
+	aegisDb, err := exported.Decrypt(password)
+	if err != nil {
+		errAndExit("Failed to decrypt Aegis database: %v", err)
+	}
 	if len(aegisDb.Entries) == 0 {
 		errAndExit("No entries in the database, nothing to save", nil)
 	}
@@ -73,5 +76,9 @@ func main() {
 			os.Exit(0)
 		}
 	}
-	aegisDb.ToKeePass(kdbxPath, password)
+	err = aegisDb.ToKeePass(kdbxPath, password)
+	if err != nil {
+		errAndExit("Conversion process failed: %v", err)
+	}
+	fmt.Println("Done")
 }

@@ -38,7 +38,8 @@ type params struct {
 	Tag   hexedBytes
 }
 
-func (a aegis) Decrypt(password []byte) db {
+func (a aegis) Decrypt(password []byte) (db, error) {
+	aegisDb := db{}
 	var masterKey []byte
 	for _, slot := range a.Header.Slots {
 		if slot.Type != 1 {
@@ -57,20 +58,19 @@ func (a aegis) Decrypt(password []byte) db {
 	}
 
 	if masterKey == nil {
-		errAndExit("Unable to decrypt the master key with the given password", nil)
+		return aegisDb, fmt.Errorf("unable to decrypt the master key with the given password")
 	}
 
 	output, err := decryptData(masterKey, a.Db, a.Header.Params)
 	if err != nil {
-		errAndExit("Failed to decrypt database field: %v", err)
+		return aegisDb, fmt.Errorf("failed to decrypt database field: %v", err)
 	}
 
-	aegisDb := db{}
 	err = json.Unmarshal(output, &aegisDb)
 	if err != nil {
-		errAndExit("Failed to unmarshal decrypted database: %v", err)
+		return aegisDb, fmt.Errorf("failed to unmarshal decrypted database: %v", err)
 	}
-	return aegisDb
+	return aegisDb, nil
 }
 
 func (b *hexedBytes) UnmarshalJSON(data []byte) error {

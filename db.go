@@ -83,10 +83,10 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 	return convertedEntry, nil
 }
 
-func (d db) ToKeePass(path string, password []byte) {
+func (d db) ToKeePass(path string, password []byte) error {
 	file, err := os.Create(path)
 	if err != nil {
-		errAndExit("Failed to create file for KeePass database: %v", err)
+		return fmt.Errorf("failed to create file for KeePass database: %v", err)
 	}
 	defer file.Close()
 
@@ -114,12 +114,14 @@ func (d db) ToKeePass(path string, password []byte) {
 
 	err = db.LockProtectedEntries()
 	if err != nil {
-		errAndExit("Failed to lock entries when saving KeePass database: %v", err)
+		return fmt.Errorf("failed to lock entries when saving KeePass database: %v", err)
 	}
 
 	keepassEncoder := gokeepasslib.NewEncoder(file)
 	err = keepassEncoder.Encode(db)
 	if err != nil {
-		errAndExit("Failed to save KeePass database: %v", err)
+		return fmt.Errorf("failed to save KeePass database: %v", err)
 	}
+
+	return nil
 }
