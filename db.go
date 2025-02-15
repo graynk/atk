@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
-	"log"
 	"os"
 )
 
@@ -42,7 +41,7 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 	case "steam":
 		totpFormat = fmt.Sprintf("%d;S", e.Info.Period)
 	default:
-		return convertedEntry, fmt.Errorf("unknown type: %s", e.Type)
+		return convertedEntry, fmt.Errorf("unknown type for entry \"%s\": %s", e.Name, e.Type)
 	}
 
 	values := []gokeepasslib.ValueData{
@@ -84,10 +83,10 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 	return convertedEntry, nil
 }
 
-func (d db) ToKeePass(path string, password []byte) {
+func (d db) ToKeePass(path string, password []byte) error {
 	file, err := os.Create(path)
 	if err != nil {
-		errAndExit("Failed to create file for KeePass database: %v", err)
+		return fmt.Errorf("failed to create file for KeePass database: %v", err)
 	}
 	defer file.Close()
 
@@ -98,7 +97,7 @@ func (d db) ToKeePass(path string, password []byte) {
 	for _, entry := range d.Entries {
 		converted, err := entry.ToKeePassEntry()
 		if err != nil {
-			log.Println(err)
+			fmt.Println(err)
 			continue
 		}
 		if entry.Icon != "" {
@@ -115,12 +114,14 @@ func (d db) ToKeePass(path string, password []byte) {
 
 	err = db.LockProtectedEntries()
 	if err != nil {
-		errAndExit("Failed to lock entries when saving KeePass database: %v", err)
+		return fmt.Errorf("failed to lock entries when saving KeePass database: %v", err)
 	}
 
 	keepassEncoder := gokeepasslib.NewEncoder(file)
 	err = keepassEncoder.Encode(db)
 	if err != nil {
-		errAndExit("Failed to save KeePass database: %v", err)
+		return fmt.Errorf("failed to save KeePass database: %v", err)
 	}
+
+	return nil
 }
