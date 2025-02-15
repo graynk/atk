@@ -57,7 +57,7 @@ func (a aegis) Decrypt(password []byte) db {
 	}
 
 	if masterKey == nil {
-		errAndExit("Provided password did not match any of the slots", nil)
+		errAndExit("Unable to decrypt the master key with the given password", nil)
 	}
 
 	output, err := decryptData(masterKey, a.Db, a.Header.Params)

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
-	"log"
 	"os"
 )
 
@@ -42,7 +41,7 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 	case "steam":
 		totpFormat = fmt.Sprintf("%d;S", e.Info.Period)
 	default:
-		return convertedEntry, fmt.Errorf("unknown type: %s", e.Type)
+		return convertedEntry, fmt.Errorf("unknown type for entry \"%s\": %s", e.Name, e.Type)
 	}
 
 	values := []gokeepasslib.ValueData{
@@ -98,7 +97,7 @@ func (d db) ToKeePass(path string, password []byte) {
 	for _, entry := range d.Entries {
 		converted, err := entry.ToKeePassEntry()
 		if err != nil {
-			log.Println(err)
+			fmt.Println(err)
 			continue
 		}
 		if entry.Icon != "" {
