@@ -5,7 +5,17 @@ import (
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
 	"maps"
+	"net/url"
 	"os"
+	"strconv"
+)
+
+type OtpStyle int
+
+const (
+	KeeTrayTotp OtpStyle = iota
+	KeePass2
+	KeeWebOtp
 )
 
 type db struct {
@@ -28,10 +38,11 @@ type entry struct {
 }
 
 type dbInfo struct {
-	Secret string
-	Algo   string
-	Digits int
-	Period int
+	Secret  string
+	Algo    string
+	Digits  int
+	Period  int
+	Counter int
 }
 
 type group struct {
@@ -39,19 +50,12 @@ type group struct {
 	Name string
 }
 
-func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
+func incompatibleFormatError(entry, format, style string) error {
+	return fmt.Errorf("Entry \"%s\" uses %s format, which is not supported for %s-style OTPs", entry, format, style)
+}
+
+func (e entry) ToKeePassEntry(style OtpStyle) (gokeepasslib.Entry, error) {
 	convertedEntry := gokeepasslib.NewEntry()
-
-	var totpFormat string
-
-	switch e.Type {
-	case "totp":
-		totpFormat = fmt.Sprintf("%d;%d", e.Info.Period, e.Info.Digits)
-	case "steam":
-		totpFormat = fmt.Sprintf("%d;S", e.Info.Period)
-	default:
-		return convertedEntry, fmt.Errorf("unknown type for entry \"%s\": %s", e.Name, e.Type)
-	}
 
 	values := []gokeepasslib.ValueData{
 		{
@@ -72,29 +76,114 @@ func (e entry) ToKeePassEntry() (gokeepasslib.Entry, error) {
 				Content: e.Note,
 			},
 		},
-		{
-			Key: "TOTP Settings",
-			Value: gokeepasslib.V{
-				Content:   totpFormat,
-				Protected: wrappers.BoolWrapper{Bool: true},
+	}
+	switch style {
+	case KeeTrayTotp:
+		convertedEntry.AutoType.DefaultSequence = "{TOTP}"
+		var content string
+		if e.Type == "totp" {
+			content = fmt.Sprintf("%d;%d", e.Info.Period, e.Info.Digits)
+		} else if e.Type == "steam" {
+			content = fmt.Sprintf("%d;S", e.Info.Period)
+		} else if e.Type == "hotp" {
+			return convertedEntry, incompatibleFormatError(e.Name, "HOTP", "KeePassXC/KeeTray")
+		} else {
+			return convertedEntry, fmt.Errorf("Unknown type for entry \"%s\": %s", e.Name, e.Type)
+		}
+		values = append(values,
+			gokeepasslib.ValueData{
+				Key: "TOTP Settings",
+				Value: gokeepasslib.V{
+					Content:   content,
+					Protected: wrappers.BoolWrapper{Bool: true},
+				},
 			},
-		},
-		{
-			Key: "TOTP Seed",
+			gokeepasslib.ValueData{
+				Key: "TOTP Seed",
+				Value: gokeepasslib.V{
+					Content:   e.Info.Secret,
+					Protected: wrappers.BoolWrapper{Bool: true},
+				},
+			})
+	case KeePass2:
+		if e.Type == "totp" {
+			convertedEntry.AutoType.DefaultSequence = "{TIMEOTP}"
+			values = append(values,
+				gokeepasslib.ValueData{
+					Key: "TimeOtp-Secret-Base32",
+					Value: gokeepasslib.V{
+						Content:   e.Info.Secret,
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+				gokeepasslib.ValueData{
+					Key: "TimeOtp-Period",
+					Value: gokeepasslib.V{
+						Content:   strconv.Itoa(e.Info.Period),
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+				gokeepasslib.ValueData{
+					Key: "TimeOtp-Length",
+					Value: gokeepasslib.V{
+						Content:   strconv.Itoa(e.Info.Digits),
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+				gokeepasslib.ValueData{
+					Key: "TimeOtp-Algorithm",
+					Value: gokeepasslib.V{
+						Content:   "HMAC-" + e.Info.Algo,
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+			)
+		} else if e.Type == "hotp" {
+			convertedEntry.AutoType.DefaultSequence = "{HMACOTP}"
+			values = append(values,
+				gokeepasslib.ValueData{
+					Key: "HmacOtp-Secret-Base32",
+					Value: gokeepasslib.V{
+						Content:   e.Info.Secret,
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+				gokeepasslib.ValueData{
+					Key: "HmacOtp-Counter",
+					Value: gokeepasslib.V{
+						Content:   strconv.Itoa(e.Info.Counter),
+						Protected: wrappers.BoolWrapper{Bool: true},
+					},
+				},
+			)
+		} else if e.Type == "steam" {
+			return convertedEntry, incompatibleFormatError(e.Name, "Steam", "KeePass2")
+		} else {
+			return convertedEntry, fmt.Errorf("Unknown type for entry \"%s\": %s", e.Name, e.Type)
+		}
+	case KeeWebOtp:
+		issuer := url.QueryEscape(e.Issuer)
+		label := url.QueryEscape(e.Name)
+		var content string
+		if e.Type == "steam" {
+			content = fmt.Sprintf("otpauth://totp/%s:%s?issuer=%s&secret=%s", label, issuer, issuer, e.Info.Secret)
+		} else {
+			content = fmt.Sprintf("otpauth://%s/%s:%s?issuer=%s&secret=%s&algorithm=%s&digits=%d&period=%d", e.Type, label, issuer, issuer, e.Info.Secret, e.Info.Algo, e.Info.Digits, e.Info.Period)
+		}
+		values = append(values, gokeepasslib.ValueData{
+			Key: "otp",
 			Value: gokeepasslib.V{
-				Content:   e.Info.Secret,
-				Protected: wrappers.BoolWrapper{Bool: true},
+				Content: content,
 			},
-		},
+		})
 	}
 	convertedEntry.Values = values
 	convertedEntry.AutoType.Enabled = wrappers.BoolWrapper{Bool: true}
-	convertedEntry.AutoType.DefaultSequence = "{TOTP}"
 
 	return convertedEntry, nil
 }
 
-func (d db) ToKeePass(path string, password []byte) error {
+func (d db) ToKeePass(path string, password []byte, style OtpStyle) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create file for KeePass database: %v", err)
@@ -115,7 +204,7 @@ func (d db) ToKeePass(path string, password []byte) error {
 	}
 
 	for _, entry := range d.Entries {
-		converted, err := entry.ToKeePassEntry()
+		converted, err := entry.ToKeePassEntry(style)
 		if err != nil {
 			fmt.Println(err)
 			continue
