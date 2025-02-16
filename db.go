@@ -146,17 +146,22 @@ func (e entry) GetKeePass2HotpFormat() ([]gokeepasslib.ValueData, error) {
 	}, nil
 }
 
-func (e entry) GetKeeWebFormat() []gokeepasslib.ValueData {
+func (e entry) GetKeeWebFormat() ([]gokeepasslib.ValueData, error) {
 	issuer := url.QueryEscape(e.Issuer)
 	label := url.QueryEscape(e.Name)
 	var content string
-	if e.Type == "steam" {
+	switch e.Type {
+	case "steam":
 		// https://github.com/keeweb/keeweb/issues/564#issuecomment-535221800
 		// kinda annoying since other clients seem to expect otpauth://steam
-		fmt.Printf("Setting value for \"%s\" entry to otpauth://totp, depending on your client you may need to change it manually to otpauth://steam\n", e.Name)
+		fmt.Printf("Setting \"otp\" value for \"%s\" entry to otpauth://totp, depending on your client you may need to change it manually to otpauth://steam\n", e.Name)
 		content = fmt.Sprintf("otpauth://totp/%s:%s?issuer=%s&secret=%s", label, issuer, issuer, e.Info.Secret)
-	} else {
+	case "totp":
 		content = fmt.Sprintf("otpauth://%s/%s:%s?issuer=%s&secret=%s&algorithm=%s&digits=%d&period=%d", e.Type, label, issuer, issuer, e.Info.Secret, e.Info.Algo, e.Info.Digits, e.Info.Period)
+	case "hotp":
+		content = fmt.Sprintf("otpauth://%s/%s:%s?issuer=%s&secret=%s&counter=%d", e.Type, label, issuer, issuer, e.Info.Secret, e.Info.Counter)
+	default:
+		return nil, fmt.Errorf("Unknown algorithm for entry \"%s\": %s", e.Name, e.Info.Algo)
 	}
 	return []gokeepasslib.ValueData{{
 		Key: "otp",
@@ -164,7 +169,7 @@ func (e entry) GetKeeWebFormat() []gokeepasslib.ValueData {
 			Content:   content,
 			Protected: wrappers.BoolWrapper{Bool: true},
 		},
-	}}
+	}}, nil
 }
 
 func (e entry) ToKeePassEntry(style OtpStyle) (gokeepasslib.Entry, error) {
@@ -218,7 +223,12 @@ func (e entry) ToKeePassEntry(style OtpStyle) (gokeepasslib.Entry, error) {
 		}
 		values = append(values, keepass2Values...)
 	case KeeWebOtp:
-		values = append(values, e.GetKeeWebFormat()...)
+		convertedEntry.AutoType.DefaultSequence = "{TOTP}"
+		keeWebValues, err := e.GetKeeWebFormat()
+		if err != nil {
+			return convertedEntry, err
+		}
+		values = append(values, keeWebValues...)
 	}
 	convertedEntry.Values = values
 	convertedEntry.AutoType.Enabled = wrappers.BoolWrapper{Bool: true}
