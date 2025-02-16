@@ -38,7 +38,12 @@ func parseArgs() (*os.File, string) {
 		errAndExit("Failed to open exported file: %v", err)
 	}
 
-	return file, os.Args[2]
+	outputPath := os.Args[2]
+	if !strings.HasSuffix(outputPath, ".kdbx") {
+		outputPath += ".kdbx"
+	}
+
+	return file, outputPath
 }
 
 func readRuneFromStdin(prompt string) rune {
@@ -65,10 +70,12 @@ func isOverwriteOk(kdbxPath string) bool {
 
 func readStyle() OtpStyle {
 	r := readRuneFromStdin(`What OTP-style should we use?
-1. KeePassXC/KeeTrayTotp (Most common, uses TOTP Seed/TOTP Settings fields)
+1. KeePassXC/KeeTrayTotp (Default, uses TOTP Seed/TOTP Settings fields)
 2. KeePass 2 (TimeOtp-Secret-Base32/HmacOtp-Secret-Base32)
-3. KeeWeb (single "otp" field in a format otpauth://type/label?secret=abcd)`)
+3. KeeWeb/Key URI (single "otp" field in a format otpauth://type/label?secret=abcd)`)
 	switch r {
+	case '\n':
+		fallthrough
 	case '1':
 		return KeeTrayTotp
 	case '2':

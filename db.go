@@ -54,6 +54,119 @@ func incompatibleFormatError(entry, format, style string) error {
 	return fmt.Errorf("Entry \"%s\" uses %s format, which is not supported for %s-style OTPs", entry, format, style)
 }
 
+func (e entry) GetKeeTrayFormat() ([]gokeepasslib.ValueData, error) {
+	var content string
+	if e.Type == "totp" {
+		content = fmt.Sprintf("%d;%d", e.Info.Period, e.Info.Digits)
+	} else if e.Type == "steam" {
+		content = fmt.Sprintf("%d;S", e.Info.Period)
+	} else if e.Type == "hotp" {
+		return nil, incompatibleFormatError(e.Name, "HOTP", "KeePassXC/KeeTray")
+	} else {
+		return nil, fmt.Errorf("Unknown type for entry \"%s\": %s", e.Name, e.Type)
+	}
+	return []gokeepasslib.ValueData{
+		{
+			Key: "TOTP Settings",
+			Value: gokeepasslib.V{
+				Content:   content,
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+		{
+			Key: "TOTP Seed",
+			Value: gokeepasslib.V{
+				Content:   e.Info.Secret,
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		}}, nil
+
+}
+
+func (e entry) GetKeePass2TotpFormat() ([]gokeepasslib.ValueData, error) {
+	var algo string
+	switch e.Info.Algo {
+	case "SHA1":
+		algo = "HMAC-SHA-1"
+	case "SHA256":
+		algo = "HMAC-SHA-256"
+	case "SHA512":
+		algo = "HMAC-SHA-512"
+	default:
+		return nil, fmt.Errorf("Unknown algorithm for entry \"%s\": %s", e.Name, e.Info.Algo)
+	}
+	return []gokeepasslib.ValueData{
+		{
+			Key: "TimeOtp-Secret-Base32",
+			Value: gokeepasslib.V{
+				Content:   e.Info.Secret,
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+		{
+			Key: "TimeOtp-Period",
+			Value: gokeepasslib.V{
+				Content:   strconv.Itoa(e.Info.Period),
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+		{
+			Key: "TimeOtp-Length",
+			Value: gokeepasslib.V{
+				Content:   strconv.Itoa(e.Info.Digits),
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+		{
+			Key: "TimeOtp-Algorithm",
+			Value: gokeepasslib.V{
+				Content:   algo,
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+	}, nil
+}
+
+func (e entry) GetKeePass2HotpFormat() ([]gokeepasslib.ValueData, error) {
+	return []gokeepasslib.ValueData{
+		{
+			Key: "HmacOtp-Secret-Base32",
+			Value: gokeepasslib.V{
+				Content:   e.Info.Secret,
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+		{
+			Key: "HmacOtp-Counter",
+			Value: gokeepasslib.V{
+				Content:   strconv.Itoa(e.Info.Counter),
+				Protected: wrappers.BoolWrapper{Bool: true},
+			},
+		},
+	}, nil
+}
+
+func (e entry) GetKeeWebFormat() []gokeepasslib.ValueData {
+	issuer := url.QueryEscape(e.Issuer)
+	label := url.QueryEscape(e.Name)
+	var content string
+	if e.Type == "steam" {
+		// https://github.com/keeweb/keeweb/issues/564#issuecomment-535221800
+		// kinda annoying since other clients seem to expect otpauth://steam
+		fmt.Printf("Setting value for \"%s\" entry to otpauth://totp, depending on your client you may need to change it manually to otpauth://steam\n", e.Name)
+		content = fmt.Sprintf("otpauth://totp/%s:%s?issuer=%s&secret=%s", label, issuer, issuer, e.Info.Secret)
+	} else {
+		content = fmt.Sprintf("otpauth://%s/%s:%s?issuer=%s&secret=%s&algorithm=%s&digits=%d&period=%d", e.Type, label, issuer, issuer, e.Info.Secret, e.Info.Algo, e.Info.Digits, e.Info.Period)
+	}
+	return []gokeepasslib.ValueData{{
+		Key: "otp",
+		Value: gokeepasslib.V{
+			Content:   content,
+			Protected: wrappers.BoolWrapper{Bool: true},
+		},
+	}}
+}
+
 func (e entry) ToKeePassEntry(style OtpStyle) (gokeepasslib.Entry, error) {
 	convertedEntry := gokeepasslib.NewEntry()
 
@@ -80,102 +193,32 @@ func (e entry) ToKeePassEntry(style OtpStyle) (gokeepasslib.Entry, error) {
 	switch style {
 	case KeeTrayTotp:
 		convertedEntry.AutoType.DefaultSequence = "{TOTP}"
-		var content string
-		if e.Type == "totp" {
-			content = fmt.Sprintf("%d;%d", e.Info.Period, e.Info.Digits)
-		} else if e.Type == "steam" {
-			content = fmt.Sprintf("%d;S", e.Info.Period)
-		} else if e.Type == "hotp" {
-			return convertedEntry, incompatibleFormatError(e.Name, "HOTP", "KeePassXC/KeeTray")
-		} else {
-			return convertedEntry, fmt.Errorf("Unknown type for entry \"%s\": %s", e.Name, e.Type)
+		keetrayValues, err := e.GetKeeTrayFormat()
+		if err != nil {
+			return convertedEntry, err
 		}
-		values = append(values,
-			gokeepasslib.ValueData{
-				Key: "TOTP Settings",
-				Value: gokeepasslib.V{
-					Content:   content,
-					Protected: wrappers.BoolWrapper{Bool: true},
-				},
-			},
-			gokeepasslib.ValueData{
-				Key: "TOTP Seed",
-				Value: gokeepasslib.V{
-					Content:   e.Info.Secret,
-					Protected: wrappers.BoolWrapper{Bool: true},
-				},
-			})
+		values = append(values, keetrayValues...)
 	case KeePass2:
-		if e.Type == "totp" {
+		var keepass2Values []gokeepasslib.ValueData
+		var err error
+		switch e.Type {
+		case "totp":
 			convertedEntry.AutoType.DefaultSequence = "{TIMEOTP}"
-			values = append(values,
-				gokeepasslib.ValueData{
-					Key: "TimeOtp-Secret-Base32",
-					Value: gokeepasslib.V{
-						Content:   e.Info.Secret,
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-				gokeepasslib.ValueData{
-					Key: "TimeOtp-Period",
-					Value: gokeepasslib.V{
-						Content:   strconv.Itoa(e.Info.Period),
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-				gokeepasslib.ValueData{
-					Key: "TimeOtp-Length",
-					Value: gokeepasslib.V{
-						Content:   strconv.Itoa(e.Info.Digits),
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-				gokeepasslib.ValueData{
-					Key: "TimeOtp-Algorithm",
-					Value: gokeepasslib.V{
-						Content:   "HMAC-" + e.Info.Algo,
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-			)
-		} else if e.Type == "hotp" {
+			keepass2Values, err = e.GetKeePass2TotpFormat()
+		case "hotp":
 			convertedEntry.AutoType.DefaultSequence = "{HMACOTP}"
-			values = append(values,
-				gokeepasslib.ValueData{
-					Key: "HmacOtp-Secret-Base32",
-					Value: gokeepasslib.V{
-						Content:   e.Info.Secret,
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-				gokeepasslib.ValueData{
-					Key: "HmacOtp-Counter",
-					Value: gokeepasslib.V{
-						Content:   strconv.Itoa(e.Info.Counter),
-						Protected: wrappers.BoolWrapper{Bool: true},
-					},
-				},
-			)
-		} else if e.Type == "steam" {
+			keepass2Values, err = e.GetKeePass2HotpFormat()
+		case "steam":
 			return convertedEntry, incompatibleFormatError(e.Name, "Steam", "KeePass2")
-		} else {
+		default:
 			return convertedEntry, fmt.Errorf("Unknown type for entry \"%s\": %s", e.Name, e.Type)
 		}
-	case KeeWebOtp:
-		issuer := url.QueryEscape(e.Issuer)
-		label := url.QueryEscape(e.Name)
-		var content string
-		if e.Type == "steam" {
-			content = fmt.Sprintf("otpauth://totp/%s:%s?issuer=%s&secret=%s", label, issuer, issuer, e.Info.Secret)
-		} else {
-			content = fmt.Sprintf("otpauth://%s/%s:%s?issuer=%s&secret=%s&algorithm=%s&digits=%d&period=%d", e.Type, label, issuer, issuer, e.Info.Secret, e.Info.Algo, e.Info.Digits, e.Info.Period)
+		if err != nil {
+			return convertedEntry, err
 		}
-		values = append(values, gokeepasslib.ValueData{
-			Key: "otp",
-			Value: gokeepasslib.V{
-				Content: content,
-			},
-		})
+		values = append(values, keepass2Values...)
+	case KeeWebOtp:
+		values = append(values, e.GetKeeWebFormat()...)
 	}
 	convertedEntry.Values = values
 	convertedEntry.AutoType.Enabled = wrappers.BoolWrapper{Bool: true}
@@ -191,7 +234,7 @@ func (d db) ToKeePass(path string, password []byte, style OtpStyle) error {
 	defer file.Close()
 
 	db := gokeepasslib.NewDatabase(gokeepasslib.WithDatabaseKDBXVersion4())
-	db.Content.Meta.DatabaseName = "TOTP" // TODO provide optional argument for database name
+	db.Content.Meta.DatabaseName = "TOTP"
 	db.Credentials = gokeepasslib.NewPasswordCredentials(string(password))
 
 	rootGroup := gokeepasslib.NewGroup()
