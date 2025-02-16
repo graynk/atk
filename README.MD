@@ -1,7 +1,7 @@
-# ATP - Aegis to KeePass
+# ATK - Aegis to KeePass
 
 A simple tool to convert exported (and encrypted) JSON from [Aegis](https://getaegis.app/) to [KeePass](https://keepass.info/download.html) database. 
-Notes, custom icons and Steam entries get exported as well.
+Notes, custom icons and Steam entries get exported as well. The group structure should be preserved too.
 
 Unfortunately, there is no single agreed-upon way to store OTPs, as different plugins/clients expect different fields to be present.
 
