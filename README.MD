@@ -13,7 +13,7 @@ Unfortunately, there is no single agreed-upon way to store OTPs, as different pl
 If your client doesn't support any of those styles - feel free to [open an issue](https://github.com/graynk/atk/issues/new) (or better yet - submit a PR)
 
 ## Installation
-`go install github.com/graynk/atk@latest` or grab a binary from the [Releases](https://github.com/graynk/atk/releases) page
+`go install github.com/graynk/atk/v2@latest` or grab a binary from the [Releases](https://github.com/graynk/atk/releases) page
 
 ## Usage
 `atk /path/to/aegis-export.json /path/to/output.kdbx`
